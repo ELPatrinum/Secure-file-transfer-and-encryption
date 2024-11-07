@@ -1,12 +1,14 @@
 import os
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.backends import default_backend
-import paramiko
+import sys
+import json
+import bcrypt
 import logging
+import paramiko
 from datetime import datetime
 from colorama import Fore, Style, init
-
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 def print_prog_name():
 	print(Fore.MAGENTA + """
@@ -65,30 +67,37 @@ def sftp_transfer_file(host, port, username, key_file, local_file, remote_file, 
         sftp.close()
         transport.close()
         print(Fore.BLUE + "Connection closed" + Style.RESET_ALL)
+        return True
     except paramiko.ssh_exception.AuthenticationException:
         print(Fore.RED + "Authentication failed. " + Style.RESET_ALL + "Please check your key and server settings.")
+        return False
     except Exception as e:
         print(Fore.RED + f"An error occurred: {e}" + Style.RESET_ALL)
+        return False
 
-class User:
-    def __init__(self, username, role):
-        self.username = username
-        self.role = role
 
-users = {
-    "admin": User("admin", "admin"),
-    "user": User("user", "user"),
-    "elpatrinum": User("elpatrinum", "user")
-}
+def create_user(username, role):
+    password = input(f"Enter password for {username}: ")
+    password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    return {"username": username, "role": role, "password_hash": password_hash}
 
-def authenticate_user(username, password):
-    return username in users and username == password
+def save_users(users, filename="users.json"):
+    with open(filename, 'w') as f:
+        json.dump(users, f)
 
-def authorize_user(username, resource):
-    user = users.get(username)
-    if user and user.role == "admin":
+def load_users(filename="users.json"):
+    with open(filename, 'r') as f:
+        return json.load(f)
+
+def authenticate_user(users, username, password):
+    user_data = users.get(username)
+    if user_data and bcrypt.checkpw(password.encode('utf-8'), user_data["password_hash"].encode('utf-8')):
         return True
-    return resource == "public_resource"
+    else:
+        print(Fore.RED + "Authentication failed." + Style.RESET_ALL)
+        sys.exit("Exiting program due to failed authentication.")
+
+users = load_users()
 
 logging.basicConfig(filename='audit_log.txt', level=logging.INFO)
 
@@ -99,42 +108,37 @@ def log_event(event):
 def main():
     print_prog_name()
 
-    key = os.urandom(32)  # 32 bytes key for AES-256
-
-    username = input(Fore.YELLOW + "Enter the Username: " + Style.RESET_ALL)
-
+    key = os.urandom(32)
+    
+    username = input(Fore.YELLOW + "Enter username: " + Style.RESET_ALL)
+    password = input(Fore.YELLOW + "Enter password: " + Style.RESET_ALL)
+    if authenticate_user(users, username, password):
+        print(Fore.GREEN + "Authentication successful."+ Style.RESET_ALL)
     remote_host = input(Fore.YELLOW + "Enter the remot host ip: " + Style.RESET_ALL)
     input_file = input(Fore.YELLOW + "Enter the name of the file: " + Style.RESET_ALL)
     encrypted_file = 'encrypted_' + input_file
     save_path = input(Fore.YELLOW + "Enter the path to save the file: " + Style.RESET_ALL)
-    key_file = os.path.expanduser('~/.ssh/id_rsa')  # Ensure this path is correct
+    key_file = os.path.expanduser('~/.ssh/id_rsa')
 
-    if authenticate_user(username, username):
-        if authorize_user(username, 'public_resource'):
-            encrypt_file(input_file, encrypted_file, key)
-            log_event(f"File {input_file} encrypted by {username}")
+    encrypt_file(input_file, encrypted_file, key)
+    log_event(f"File {input_file} encrypted by {username}")
 
-            # Transfer file to remote server
-            sftp_transfer_file(remote_host, 22, username, key_file, encrypted_file, save_path + "/" + encrypted_file, upload=True)
-            log_event(f"File {encrypted_file} transferred to remote server by {username}")
+    if sftp_transfer_file(remote_host, 22, username, key_file, encrypted_file, save_path + "/" + encrypted_file, upload=True):
+        log_event(f"File {encrypted_file} transferred to remote server by {username}")
 
-            # Simulate file transfer back for decryption
-            # decrypted_file = input(Fore.YELLOW + "Enter the name to save the decrypted file: " + Style.RESET_ALL)
-            # sftp_transfer_file(remote_host, 22, username, key_file, encrypted_file, f'/home/{username}/{encrypted_file}', upload=False)
+    # Simulate file transfer back for decryption
+    # decrypted_file = input(Fore.YELLOW + "Enter the name to save the decrypted file: " + Style.RESET_ALL)
+    # sftp_transfer_file(remote_host, 22, username, key_file, encrypted_file, save_path + "/" + encrypted_file, upload=False)
 
-            # # Ensure the decrypted file is saved in the specified path
-            # decrypted_full_path = os.path.join(save_path, decrypted_file)
-            # decrypt_file(encrypted_file, decrypted_full_path, key)
-            # log_event(f"File {decrypted_full_path} decrypted by {username}")
+    # # Ensure the decrypted file is saved in the specified path
+    # decrypted_full_path = os.path.join(save_path, decrypted_file)
+    # decrypt_file(encrypted_file, decrypted_full_path, key)
+    # log_event(f"File {decrypted_full_path} decrypted by {username}")
 
-            # Ensure encrypted file is deleted after decryption
-            if os.path.exists(encrypted_file):
-                os.remove(encrypted_file)
-                log_event(f"File {encrypted_file} deleted after decryption")
-        else:
-            print(Fore.RED + "Authorization failed." + Style.RESET_ALL)
-    else:
-        print(Fore.RED + Fore.YELLOW +"Authentication failed." + Style.RESET_ALL)
+    # Ensure encrypted file is deleted after decryption
+    if os.path.exists(encrypted_file):
+        os.remove(encrypted_file)
+        log_event(f"File {encrypted_file} deleted")
 
 if __name__ == "__main__":
     main()
