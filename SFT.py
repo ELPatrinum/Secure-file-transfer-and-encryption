@@ -4,6 +4,7 @@ import json
 import bcrypt
 import logging
 import paramiko
+from getpass import getpass
 from datetime import datetime
 from colorama import Fore, Style, init
 from cryptography.hazmat.primitives import padding
@@ -108,34 +109,32 @@ def log_event(event):
 def main():
     print_prog_name()
 
-    key = os.urandom(32)
+    with open("key.bin", "rb") as key_file:
+        key = key_file.read()
     
     username = input(Fore.YELLOW + "Enter username: " + Style.RESET_ALL)
-    password = input(Fore.YELLOW + "Enter password: " + Style.RESET_ALL)
+    password = getpass(Fore.YELLOW + "Enter password: " + Style.RESET_ALL)
     if authenticate_user(users, username, password):
         print(Fore.GREEN + "Authentication successful."+ Style.RESET_ALL)
-    remote_host = input(Fore.YELLOW + "Enter the remot host ip: " + Style.RESET_ALL)
-    input_file = input(Fore.YELLOW + "Enter the name of the file: " + Style.RESET_ALL)
-    encrypted_file = 'encrypted_' + input_file
-    save_path = input(Fore.YELLOW + "Enter the path to save the file: " + Style.RESET_ALL)
-    key_file = os.path.expanduser('~/.ssh/id_rsa')
+    option   = input(Fore.YELLOW + "Enter the option:" + Fore.BLUE +"\nSend[1] - Decrypt[2]\n => " + Style.RESET_ALL)
+    if option == '1':    
+        remote_host = input(Fore.YELLOW + "Enter the remot host ip: " + Style.RESET_ALL)
+        input_file = input(Fore.YELLOW + "Enter the name of the file: " + Style.RESET_ALL)
+        encrypted_file = 'encrypted_' + input_file
+        save_path = input(Fore.YELLOW + "Enter the path to save the file: " + Style.RESET_ALL)
+        key_file = os.path.expanduser('~/.ssh/id_rsa')
 
-    encrypt_file(input_file, encrypted_file, key)
-    log_event(f"File {input_file} encrypted by {username}")
+        encrypt_file(input_file, encrypted_file, key)
+        log_event(f"File {input_file} encrypted by {username}")
 
-    if sftp_transfer_file(remote_host, 22, username, key_file, encrypted_file, save_path + "/" + encrypted_file, upload=True):
-        log_event(f"File {encrypted_file} transferred to remote server by {username}")
+        if sftp_transfer_file(remote_host, 22, username, key_file, encrypted_file, save_path + "/" + encrypted_file, upload=True):
+            log_event(f"File {encrypted_file} transferred to remote server by {username}")
 
-    # Simulate file transfer back for decryption
-    # decrypted_file = input(Fore.YELLOW + "Enter the name to save the decrypted file: " + Style.RESET_ALL)
-    # sftp_transfer_file(remote_host, 22, username, key_file, encrypted_file, save_path + "/" + encrypted_file, upload=False)
-
-    # # Ensure the decrypted file is saved in the specified path
-    # decrypted_full_path = os.path.join(save_path, decrypted_file)
-    # decrypt_file(encrypted_file, decrypted_full_path, key)
-    # log_event(f"File {decrypted_full_path} decrypted by {username}")
-
-    # Ensure encrypted file is deleted after decryption
+    if option == '2':
+        encrypted_file = input(Fore.YELLOW + "Enter the name of the file you want to decrypt: " + Style.RESET_ALL)
+        output_file = input(Fore.YELLOW + "Enter the name you want to save the file as: " + Style.RESET_ALL)
+        decrypt_file(encrypted_file, output_file, key)
+        log_event(f"File {input_file} dencrypted by {username}")
     if os.path.exists(encrypted_file):
         os.remove(encrypted_file)
         log_event(f"File {encrypted_file} deleted")
