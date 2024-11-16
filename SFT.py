@@ -108,6 +108,8 @@ def log_event(event):
 
 def main():
     print_prog_name()
+    options = {'1', '2', '3'}
+    rmv = {'1', '3'}
 
     with open("key.bin", "rb") as key_file:
         key = key_file.read()
@@ -116,7 +118,11 @@ def main():
     password = getpass(Fore.YELLOW + "Enter password: " + Style.RESET_ALL)
     if authenticate_user(users, username, password):
         print(Fore.GREEN + "Authentication successful."+ Style.RESET_ALL)
-    option   = input(Fore.YELLOW + "Enter the option:" + Fore.BLUE +"\nSend[1] - Decrypt[2]\n => " + Style.RESET_ALL)
+    option   = input(Fore.YELLOW + "Enter the option:" + Fore.BLUE +"\nSend[1] - Encrypt[2]- Decrypt[3]\n => " + Style.RESET_ALL)
+    if option not in options :
+        print(Fore.RED + "Invalid Opotion" + Style.RESET_ALL)
+        sys.exit(1)
+
     if option == '1':    
         remote_host = input(Fore.YELLOW + "Enter the remot host ip: " + Style.RESET_ALL)
         input_file = input(Fore.YELLOW + "Enter the name of the file: " + Style.RESET_ALL)
@@ -130,12 +136,22 @@ def main():
         if sftp_transfer_file(remote_host, 22, username, key_file, encrypted_file, save_path + "/" + encrypted_file, upload=True):
             log_event(f"File {encrypted_file} transferred to remote server by {username}")
 
+
     if option == '2':
+        input_file= input(Fore.YELLOW + "Enter the name of the file you want to decrypt: " + Style.RESET_ALL)
+        output_file = input(Fore.YELLOW + "Enter the name you want to save the file as: " + Style.RESET_ALL)
+        encrypt_file(input_file, output_file, key)
+        log_event(f"File {input_file} encrypted by {username}")
+
+
+    if option == '3':
         encrypted_file = input(Fore.YELLOW + "Enter the name of the file you want to decrypt: " + Style.RESET_ALL)
         output_file = input(Fore.YELLOW + "Enter the name you want to save the file as: " + Style.RESET_ALL)
         decrypt_file(encrypted_file, output_file, key)
         log_event(f"File {input_file} dencrypted by {username}")
-    if os.path.exists(encrypted_file):
+
+
+    if option in rmv and os.path.exists(encrypted_file):
         os.remove(encrypted_file)
         log_event(f"File {encrypted_file} deleted")
 
